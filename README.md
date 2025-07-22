@@ -127,7 +127,7 @@ Then open: http://127.0.0.1:8050
 ## 📁 Project Structure
 
 ```
-ns_log_analayzer/
+nimble-streamer-log-analyzer/
 ├── web_gui.py                    # Main web interface with 8 analysis tabs
 ├── json_log_analyzer.py          # Multi-format log analyzer
 ├── nimble_app_log_parser.py      # Nimble app log parser with HTTP error extraction
