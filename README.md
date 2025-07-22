@@ -1,4 +1,4 @@
-# 🚀 Nimble Streamer Log Analyzer v2.0
+# 🚀 Nimble Streamer Log Analyzer
 
 A powerful Python tool for analyzing large Nimble Streamer log files with advanced web interface and comprehensive reporting capabilities.
 
@@ -7,8 +7,8 @@ A powerful Python tool for analyzing large Nimble Streamer log files with advanc
 - **Multi-Format Support**: JSON logs, traditional HTTP access logs, and Nimble application logs
 - **Large File Processing**: Efficiently handles 130+ MB files with chunked reading and progress tracking
 - **Enhanced Web Interface**: Feature-rich Dash web GUI with 8 specialized analysis tabs
-- **HTTP Error Analysis**: **NEW!** Extract and analyze HTTP error codes with server IP and stream name detection
-- **IP & Stream Extraction**: **NEW!** Parse URLs like `http://38.46.143.164:8081/stream/cinecanal/playlist.m3u8` to extract server IPs and stream names
+- **HTTP Error Analysis**: Extract and analyze HTTP error codes with server IP and stream name detection
+- **IP & Stream Extraction**: Parse URLs like `http://SERVER_IP:PORT/stream/STREAM_NAME/playlist.m3u8` to extract server IPs and stream names
 - **Comprehensive Reports**: CSV, Excel files with multi-sheet reports, charts and PNG visualizations
 - **Smart Detection**: Automatically detects log format and optimizes parsing
 - **Memory Efficient**: Processes large files without memory issues using pandas chunking
@@ -30,7 +30,7 @@ A powerful Python tool for analyzing large Nimble Streamer log files with advanc
 ```
 [2024-07-22 14:30:00.123 12345-67890] [StreamManager] E: http error code=404 for url='http://SERVER_IP:8081/stream/cinecanal/playlist.m3u8' hls camera s=
 ```
-**NEW!** Extracts: Error code `404`, Server IP `SERVER_IP`, Stream name `cinecanal`
+Extracts: Error code `404`, Server IP `SERVER_IP`, Stream name `cinecanal`
 
 ## � Web Interface Analysis Tabs
 
@@ -49,7 +49,7 @@ A powerful Python tool for analyzing large Nimble Streamer log files with advanc
 - Geographic insights and user engagement metrics
 - IP-based filtering and analysis
 
-### 🚨 HTTP Errors & Streaming (**NEW!**)
+### 🚨 HTTP Errors & Streaming
 - **HTTP Error Code Analysis**: Complete breakdown of 4xx/5xx errors
 - **Server IP Extraction**: Identifies server IPs from error URLs
 - **Stream Name Detection**: Extracts stream names like "cinecanal" from URLs
@@ -106,25 +106,16 @@ Then open: http://127.0.0.1:8050
 - **Visual Reports**: Timeline graphs, hourly distributions, status code analysis, error trends
 - **Export Options**: CSV, Excel with multiple sheets, PNG visualizations
 - **Detailed Insights**: IP analysis, error patterns, streaming performance, server metrics
-- **HTTP Error Intelligence**: **NEW!** Server IP and stream name extraction from error URLs
+- **HTTP Error Intelligence**: Server IP and stream name extraction from error URLs
 - **Advanced Filtering**: Filter by date range, status codes, protocols, IPs, and streams
 
 ## 🛠 Core Components
 
 - `json_log_analyzer.py` - Enhanced multi-format analyzer with JSON support
-- `nimble_app_log_parser.py` - **NEW!** Specialized parser for Nimble application logs with HTTP error extraction  
+- `nimble_app_log_parser.py` - Specialized parser for Nimble application logs with HTTP error extraction  
 - `web_gui.py` - Feature-rich Dash web interface with 8 analysis tabs
 - `log_analyzer.py` - Traditional log format analyzer
 - `start_web_gui.bat` - Easy launcher with threading fixes and port detection
-
-## 🆕 What's New in v2.0
-
-- **HTTP Error Analysis**: Extract error codes, server IPs, and stream names from Nimble log messages
-- **Enhanced Web GUI**: New "HTTP Errors & Streaming" tab with comprehensive analysis
-- **URL Pattern Recognition**: Parse URLs like `http://SERVER_IP:PORT/stream/STREAM_NAME/playlist.m3u8`
-- **Server:Stream Mapping**: Track which servers serve which streams
-- **Improved Memory Handling**: Better chunked processing for 130MB+ files
-- **Advanced Filtering**: Filter analysis results by multiple criteria
 
 ## 📋 Requirements
 
@@ -139,7 +130,7 @@ Then open: http://127.0.0.1:8050
 ns_log_analayzer/
 ├── web_gui.py                    # Main web interface with 8 analysis tabs
 ├── json_log_analyzer.py          # Multi-format log analyzer
-├── nimble_app_log_parser.py      # NEW! Nimble app log parser with HTTP error extraction
+├── nimble_app_log_parser.py      # Nimble app log parser with HTTP error extraction
 ├── log_analyzer.py               # Traditional log format analyzer  
 ├── requirements.txt              # Python dependencies
 ├── start_web_gui.bat            # Windows launcher
