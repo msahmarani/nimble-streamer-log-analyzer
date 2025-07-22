@@ -28,9 +28,9 @@ A powerful Python tool for analyzing large Nimble Streamer log files with advanc
 
 ### 3. Nimble Application Logs (with HTTP Error Detection)
 ```
-[2024-07-22 14:30:00.123 12345-67890] [StreamManager] E: http error code=404 for url='http://38.46.143.164:8081/stream/cinecanal/playlist.m3u8' hls camera s=
+[2024-07-22 14:30:00.123 12345-67890] [StreamManager] E: http error code=404 for url='http://SERVER_IP:8081/stream/cinecanal/playlist.m3u8' hls camera s=
 ```
-**NEW!** Extracts: Error code `404`, Server IP `38.46.143.164`, Stream name `cinecanal`
+**NEW!** Extracts: Error code `404`, Server IP `SERVER_IP`, Stream name `cinecanal`
 
 ## � Web Interface Analysis Tabs
 
@@ -121,7 +121,7 @@ Then open: http://127.0.0.1:8050
 
 - **HTTP Error Analysis**: Extract error codes, server IPs, and stream names from Nimble log messages
 - **Enhanced Web GUI**: New "HTTP Errors & Streaming" tab with comprehensive analysis
-- **URL Pattern Recognition**: Parse URLs like `http://38.46.143.164:8081/stream/cinecanal/playlist.m3u8`
+- **URL Pattern Recognition**: Parse URLs like `http://SERVER_IP:PORT/stream/STREAM_NAME/playlist.m3u8`
 - **Server:Stream Mapping**: Track which servers serve which streams
 - **Improved Memory Handling**: Better chunked processing for 130MB+ files
 - **Advanced Filtering**: Filter analysis results by multiple criteria

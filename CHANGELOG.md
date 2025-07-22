@@ -4,7 +4,7 @@
 
 ### 🆕 New Features
 - **HTTP Error Analysis Tab**: Comprehensive analysis of HTTP error codes from Nimble application logs
-- **Server IP Extraction**: Parse server IP addresses from URLs in error messages (e.g., `http://38.46.143.164:8081/...`)
+- **Server IP Extraction**: Parse server IP addresses from URLs in error messages (e.g., `http://SERVER_IP:PORT/...`)
 - **Stream Name Detection**: Extract stream names from URL paths (e.g., "cinecanal" from `/stream/cinecanal/playlist.m3u8`)
 - **Server:Stream Combinations**: Track and analyze which servers serve which streams
 - **Enhanced Nimble App Log Parser**: New dedicated parser for Nimble application log format
