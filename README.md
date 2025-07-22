@@ -46,7 +46,10 @@ Extracts: Error code `404`, Server IP `SERVER_IP`, Stream name `cinecanal`
 
 ### 🌐 IP Analysis
 - Top IP addresses by request count
-- Geographic insights and user engagement metrics
+- **NEW: IPinfo Integration** - Geographic and ISP analysis
+- Country distribution with pie charts
+- ISP/Organization identification
+- Private IP detection and labeling
 - IP-based filtering and analysis
 
 ### 🚨 HTTP Errors & Streaming
@@ -124,6 +127,22 @@ Then open: http://127.0.0.1:8050
 - openpyxl, tqdm, regex
 - See `requirements.txt` for complete list
 
+## 🌍 NEW: IPinfo Integration
+
+### Enhanced Geographic Analysis
+- **Country Distribution**: Visual pie charts showing traffic by country
+- **ISP Analysis**: Identify top internet service providers and organizations
+- **Enhanced IP Tables**: IP addresses now include country, city, and ISP data
+- **Smart Caching**: Efficient API usage with local caching
+- **Private IP Detection**: Automatically identifies internal/private networks
+
+### Setup IPinfo (Optional)
+1. Get free API token at [https://ipinfo.io](https://ipinfo.io) (50,000 requests/month free)
+2. In the web interface, enter your token in the "🌍 IP Geolocation Configuration" section
+3. Enable "IP Geolocation Analysis" checkbox
+
+See `IPINFO_SETUP.md` for detailed configuration instructions.
+
 ## 📁 Project Structure
 
 ```
@@ -131,10 +150,12 @@ nimble-streamer-log-analyzer/
 ├── web_gui.py                    # Main web interface with 8 analysis tabs
 ├── json_log_analyzer.py          # Multi-format log analyzer
 ├── nimble_app_log_parser.py      # Nimble app log parser with HTTP error extraction
-├── log_analyzer.py               # Traditional log format analyzer  
+├── log_analyzer.py               # Traditional log format analyzer
+├── ipinfo_service.py             # NEW: IPinfo API integration
 ├── requirements.txt              # Python dependencies
 ├── start_web_gui.bat            # Windows launcher
 ├── launch_web_gui.ps1           # PowerShell launcher
+├── IPINFO_SETUP.md              # IPinfo configuration guide
 ├── logs/                        # Upload log files here
 └── reports/                     # Generated reports (CSV, Excel, PNG)
 ```
@@ -143,6 +164,7 @@ nimble-streamer-log-analyzer/
 
 - **Server Monitoring**: Track HTTP errors and identify problematic streams
 - **Performance Analysis**: Analyze request patterns and peak usage times
+- **Geographic Analysis**: NEW - Understand traffic sources by country and ISP
 - **Troubleshooting**: Extract server IPs and stream names from error messages
 - **Capacity Planning**: Understand traffic patterns and bandwidth usage
 - **Content Performance**: Identify popular streams and content success rates

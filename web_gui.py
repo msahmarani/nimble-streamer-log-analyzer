@@ -18,6 +18,7 @@ from json_log_analyzer import JSONNimbleLogAnalyzer
 import socket
 from log_analyzer import NimbleLogAnalyzer
 from json_log_analyzer import JSONNimbleLogAnalyzer
+from ipinfo_service import get_ipinfo_service, set_ipinfo_token
 
 # Initialize Dash app
 app = dash.Dash(__name__, title="Nimble Streamer Log Analyzer")
@@ -65,6 +66,39 @@ app.layout = html.Div([
                            'padding': '10px 20px', 'borderRadius': '5px', 'cursor': 'pointer',
                            'fontSize': '16px', 'marginTop': '10px'}),
         dcc.Loading(id="loading", children=[html.Div(id="loading-output")], type="default"),
+    ], style={'padding': '20px', 'backgroundColor': 'white', 'borderRadius': '10px',
+              'boxShadow': '0 2px 10px rgba(0,0,0,0.1)', 'marginBottom': '20px'}),
+    
+    # IPinfo Configuration Section
+    html.Div([
+        html.H3("🌍 IP Geolocation Configuration"),
+        html.Div([
+            html.Div([
+                html.Label("🔑 IPinfo API Token (Optional):", style={'fontWeight': 'bold'}),
+                dcc.Input(
+                    id='ipinfo-token',
+                    type='password',
+                    placeholder='Enter your IPinfo API token for enhanced features',
+                    style={'width': '100%', 'padding': '8px', 'borderRadius': '5px', 'border': '1px solid #ddd'}
+                ),
+                html.P("💡 Get a free token at https://ipinfo.io to enable country and ISP analysis", 
+                       style={'color': '#7f8c8d', 'fontSize': '14px', 'margin': '5px 0'})
+            ], style={'width': '60%', 'display': 'inline-block', 'margin': '10px'}),
+            
+            html.Div([
+                html.Button('Set Token', id='set-token-button', n_clicks=0,
+                           style={'backgroundColor': '#3498db', 'color': 'white', 'border': 'none',
+                                  'padding': '10px 20px', 'borderRadius': '5px', 'cursor': 'pointer',
+                                  'fontSize': '14px', 'margin': '10px'}),
+                dcc.Checklist(
+                    id='enable-ipinfo',
+                    options=[{'label': ' Enable IP Geolocation Analysis', 'value': 'enabled'}],
+                    value=['enabled'],
+                    style={'margin': '10px'}
+                )
+            ], style={'width': '35%', 'display': 'inline-block', 'verticalAlign': 'top'})
+        ]),
+        html.Div(id='ipinfo-status', style={'margin': '10px 0'})
     ], style={'padding': '20px', 'backgroundColor': 'white', 'borderRadius': '10px',
               'boxShadow': '0 2px 10px rgba(0,0,0,0.1)', 'marginBottom': '20px'}),
     
@@ -881,7 +915,7 @@ def render_content_tab():
         ])
 
 def render_ip_tab():
-    """Render the IP analysis tab."""
+    """Render the IP analysis tab with IPinfo integration."""
     global current_data
     
     try:
@@ -891,72 +925,158 @@ def render_ip_tab():
                        style={'textAlign': 'center', 'color': '#7f8c8d', 'margin': '50px'})
             ])
         
-        # Top IPs
-        try:
-            # Filter out null/empty IP addresses
-            valid_ips = current_data[current_data['ip_address'].notna() & (current_data['ip_address'] != '')]
-            
-            if valid_ips.empty:
-                return html.Div([
-                    html.P("No valid IP addresses found in the data.", 
-                           style={'textAlign': 'center', 'color': '#7f8c8d', 'margin': '50px'})
-                ])
-            
-            top_ips = valid_ips['ip_address'].value_counts().head(20)
-            
-            if not top_ips.empty:
-                # Create chart
-                fig_ips = px.bar(
-                    x=top_ips.values,
-                    y=top_ips.index,
-                    orientation='h',
-                    title="Top 20 IP Addresses by Request Count",
-                    labels={'x': 'Number of Requests', 'y': 'IP Address'}
-                )
-                fig_ips.update_layout(height=600)
-                
-                # Create table data
-                table_data = []
-                total_requests = len(current_data)
-                for ip, count in top_ips.head(10).items():
-                    percentage = f"{(count/total_requests)*100:.2f}%" if total_requests > 0 else "0%"
-                    table_data.append({
-                        'IP Address': str(ip),
-                        'Requests': f"{count:,}",
-                        'Percentage': percentage
-                    })
-                
-                return html.Div([
-                    dcc.Graph(figure=fig_ips),
-                    html.Hr(),
-                    html.H4("📋 Top IP Addresses Table"),
-                    dash_table.DataTable(
-                        data=table_data,
-                        columns=[
-                            {'name': 'IP Address', 'id': 'IP Address'},
-                            {'name': 'Requests', 'id': 'Requests'},
-                            {'name': 'Percentage', 'id': 'Percentage'}
-                        ],
-                        style_cell={'textAlign': 'left', 'padding': '10px'},
-                        style_header={'backgroundColor': '#3498db', 'color': 'white', 'fontWeight': 'bold'},
-                        style_data={'backgroundColor': '#f8f9fa'}
-                    )
-                ])
-            else:
-                return html.Div([
-                    html.P("No IP data to display.", 
-                           style={'textAlign': 'center', 'color': '#7f8c8d', 'margin': '50px'})
-                ])
-                
-        except Exception as e:
-            print(f"IP analysis error: {str(e)}")
+        # Filter out null/empty IP addresses
+        valid_ips = current_data[current_data['ip_address'].notna() & (current_data['ip_address'] != '')]
+        
+        if valid_ips.empty:
             return html.Div([
-                html.P(f"Error analyzing IP data: {str(e)}", 
-                       style={'color': '#e74c3c', 'textAlign': 'center', 'margin': '50px'})
+                html.P("No valid IP addresses found in the data.", 
+                       style={'textAlign': 'center', 'color': '#7f8c8d', 'margin': '50px'})
             ])
+        
+        # Get top IPs
+        top_ips = valid_ips['ip_address'].value_counts().head(20)
+        
+        # Try to enrich with IPinfo data
+        ipinfo_enabled = True
+        enriched_data = None
+        
+        try:
+            ipinfo_service = get_ipinfo_service()
+            # Take a sample of unique IPs for enrichment (limit to avoid too many API calls)
+            sample_ips = valid_ips['ip_address'].unique()[:50]  # Limit to 50 unique IPs
+            enriched_sample = ipinfo_service.batch_lookup(sample_ips.tolist())
             
+            # Merge back with original data
+            enriched_data = valid_ips.merge(
+                enriched_sample[['ip', 'country', 'region', 'city', 'org', 'is_private']], 
+                left_on='ip_address', 
+                right_on='ip', 
+                how='left'
+            )
+            
+        except Exception as e:
+            print(f"IPinfo enrichment failed: {e}")
+            ipinfo_enabled = False
+        
+        # Create components list
+        components = []
+        
+        # Top IPs Chart
+        if not top_ips.empty:
+            fig_ips = px.bar(
+                x=top_ips.values,
+                y=top_ips.index,
+                orientation='h',
+                title="Top 20 IP Addresses by Request Count",
+                labels={'x': 'Number of Requests', 'y': 'IP Address'}
+            )
+            fig_ips.update_layout(height=600)
+            components.append(dcc.Graph(figure=fig_ips))
+            components.append(html.Hr())
+        
+        # Country Analysis (if IPinfo data available)
+        if enriched_data is not None and 'country' in enriched_data.columns:
+            country_data = enriched_data[enriched_data['country'].notna() & (enriched_data['country'] != 'Unknown')]
+            if not country_data.empty:
+                country_stats = country_data['country'].value_counts().head(15)
+                
+                if len(country_stats) > 0:
+                    # Country pie chart
+                    fig_countries = px.pie(
+                        values=country_stats.values,
+                        names=country_stats.index,
+                        title="🌍 Requests by Country"
+                    )
+                    fig_countries.update_layout(height=500)
+                    components.extend([
+                        html.H4("🌍 Geographic Analysis", style={'color': '#2980b9'}),
+                        dcc.Graph(figure=fig_countries),
+                        html.Hr()
+                    ])
+        
+        # ISP/Organization Analysis (if IPinfo data available)
+        if enriched_data is not None and 'org' in enriched_data.columns:
+            org_data = enriched_data[enriched_data['org'].notna() & (enriched_data['org'] != 'Unknown')]
+            if not org_data.empty:
+                org_stats = org_data['org'].value_counts().head(10)
+                
+                if len(org_stats) > 0:
+                    fig_orgs = px.bar(
+                        x=org_stats.values,
+                        y=org_stats.index,
+                        orientation='h',
+                        title="🏢 Top ISPs/Organizations",
+                        labels={'x': 'Number of Requests', 'y': 'Organization'}
+                    )
+                    fig_orgs.update_layout(height=400)
+                    components.extend([
+                        html.H4("🏢 ISP/Organization Analysis", style={'color': '#2980b9'}),
+                        dcc.Graph(figure=fig_orgs),
+                        html.Hr()
+                    ])
+        
+        # Top IP Addresses Table (enhanced with geo data if available)
+        table_data = []
+        total_requests = len(current_data)
+        
+        for ip, count in top_ips.head(10).items():
+            percentage = f"{(count/total_requests)*100:.2f}%" if total_requests > 0 else "0%"
+            
+            row = {
+                'IP Address': str(ip),
+                'Requests': f"{count:,}",
+                'Percentage': percentage
+            }
+            
+            # Add geographic info if available
+            if enriched_data is not None:
+                ip_info = enriched_data[enriched_data['ip_address'] == ip]
+                if not ip_info.empty:
+                    first_match = ip_info.iloc[0]
+                    row['Country'] = first_match.get('country', 'Unknown')
+                    row['City'] = first_match.get('city', 'Unknown')
+                    row['ISP/Org'] = first_match.get('org', 'Unknown')
+            
+            table_data.append(row)
+        
+        # Table columns
+        table_columns = [
+            {'name': 'IP Address', 'id': 'IP Address'},
+            {'name': 'Requests', 'id': 'Requests'},
+            {'name': 'Percentage', 'id': 'Percentage'}
+        ]
+        
+        if enriched_data is not None:
+            table_columns.extend([
+                {'name': 'Country', 'id': 'Country'},
+                {'name': 'City', 'id': 'City'},
+                {'name': 'ISP/Org', 'id': 'ISP/Org'}
+            ])
+        
+        components.extend([
+            html.H4("📋 Top IP Addresses Table"),
+            dash_table.DataTable(
+                data=table_data,
+                columns=table_columns,
+                style_cell={'textAlign': 'left', 'padding': '10px'},
+                style_header={'backgroundColor': '#3498db', 'color': 'white', 'fontWeight': 'bold'},
+                style_data={'backgroundColor': '#f8f9fa'}
+            )
+        ])
+        
+        # Add IPinfo status message
+        if not ipinfo_enabled:
+            components.insert(0, html.Div([
+                html.P("ℹ️ Enhanced geographic analysis not available. Configure IPinfo token for country and ISP details.", 
+                       style={'backgroundColor': '#e8f4f8', 'color': '#2980b9', 'padding': '10px', 
+                              'borderRadius': '5px', 'margin': '10px 0', 'border': '1px solid #3498db'})
+            ]))
+        
+        return html.Div(components)
+                
     except Exception as e:
-        print(f"IP tab error: {str(e)}")
+        print(f"IP analysis error: {str(e)}")
         return html.Div([
             html.P(f"❌ Error loading IP analysis: {str(e)}", 
                    style={'color': '#e74c3c', 'fontWeight': 'bold', 'textAlign': 'center',
@@ -1459,6 +1579,34 @@ def find_available_port(start_port=8050, max_attempts=10):
         except Exception:
             continue
     return None
+
+# IPinfo Token Configuration Callback
+@app.callback(
+    Output('ipinfo-status', 'children'),
+    Input('set-token-button', 'n_clicks'),
+    State('ipinfo-token', 'value')
+)
+def set_ipinfo_token_callback(n_clicks, token):
+    """Set IPinfo API token when button is clicked."""
+    if n_clicks > 0:
+        if token and token.strip():
+            try:
+                set_ipinfo_token(token.strip())
+                return html.Div([
+                    html.P("✅ IPinfo API token configured successfully!", 
+                           style={'color': '#27ae60', 'fontWeight': 'bold'})
+                ])
+            except Exception as e:
+                return html.Div([
+                    html.P(f"❌ Error setting token: {str(e)}", 
+                           style={'color': '#e74c3c', 'fontWeight': 'bold'})
+                ])
+        else:
+            return html.Div([
+                html.P("⚠️ Please enter a valid API token", 
+                       style={'color': '#f39c12', 'fontWeight': 'bold'})
+            ])
+    return html.Div()
 
 if __name__ == '__main__':
     try:
