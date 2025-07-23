@@ -135,14 +135,24 @@ class LocalIPDatabase:
         try:
             data = self.lite_reader.get(ip)
             if data:
+                # Handle different data types returned by MMDB
+                def safe_get(obj, key: str, default: str = 'Unknown') -> str:
+                    """Safely get value from MMDB data."""
+                    if hasattr(obj, 'get') and callable(getattr(obj, 'get')):
+                        return obj.get(key, default)
+                    elif hasattr(obj, key):
+                        return getattr(obj, key, default)
+                    else:
+                        return default
+                
                 return {
-                    'country': data.get('country', 'Unknown'),
-                    'country_code': data.get('country_code', 'XX'),
-                    'continent': data.get('continent', 'Unknown'),
-                    'continent_code': data.get('continent_code', 'XX'),
-                    'asn': data.get('asn', 'Unknown'),
-                    'as_name': data.get('as_name', 'Unknown'),
-                    'as_domain': data.get('as_domain', 'unknown'),
+                    'country': safe_get(data, 'country', 'Unknown'),
+                    'country_code': safe_get(data, 'country_code', 'XX'),
+                    'continent': safe_get(data, 'continent', 'Unknown'),
+                    'continent_code': safe_get(data, 'continent_code', 'XX'),
+                    'asn': safe_get(data, 'asn', 'Unknown'),
+                    'as_name': safe_get(data, 'as_name', 'Unknown'),
+                    'as_domain': safe_get(data, 'as_domain', 'unknown'),
                     'source': 'mmdb'
                 }
             return None
@@ -526,7 +536,7 @@ class LocalIPDatabase:
             
             return [dict(zip(columns, row)) for row in rows]
     
-    def export_to_csv(self, filename: str = None) -> str:
+    def export_to_csv(self, filename: Optional[str] = None) -> str:
         """Export IP database to CSV file."""
         if not filename:
             filename = f"ip_database_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
