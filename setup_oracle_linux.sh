@@ -36,6 +36,33 @@ pip install --upgrade pip
 echo "📚 Installing Python packages..."
 pip install -r requirements.txt
 
+# Install maxminddb for offline database support (optional)
+echo "🗄️ Installing maxminddb for offline databases..."
+pip install maxminddb>=2.2.0
+
+# Create ipinfo_data directory for optional databases
+echo "📁 Creating IPinfo data directory..."
+mkdir -p ipinfo_data
+
+# IPinfo Lite API Information
+echo "🌍 IPinfo Integration Setup"
+echo "=================================="
+echo "✅ IPinfo Lite API: FREE & UNLIMITED"
+echo "   - No token required"
+echo "   - Country, continent, and ASN data"
+echo "   - No daily/monthly limits"
+echo ""
+echo "📋 API Endpoint: https://api.ipinfo.io/lite/{ip}"
+echo "📋 Example: https://api.ipinfo.io/lite/8.8.8.8"
+echo ""
+echo "� Optional: Enhanced IPinfo with Token"
+echo "   - Get free token at: https://ipinfo.io/signup"
+echo "   - City-level accuracy + ISP data"
+echo "   - 50,000 requests/month free"
+echo ""
+echo "✅ Your analyzer will use IPinfo Lite API by default!"
+echo "✅ Add token in web interface for enhanced features."
+
 # Set executable permissions
 echo "🔐 Setting executable permissions..."
 chmod +x start_web_gui_linux.sh

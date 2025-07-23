@@ -73,14 +73,13 @@ def main():
         print()
         
         # Start the server with external access
-        app.run_server(
+        app.run(
             host='0.0.0.0',  # Accept connections from any IP
             port=port,
             debug=False,
             dev_tools_ui=False,
             dev_tools_props_check=False,
-            use_reloader=False,
-            threaded=True
+            use_reloader=False
         )
         
     except ImportError as e:

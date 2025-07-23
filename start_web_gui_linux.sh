@@ -61,10 +61,12 @@ sys.path.insert(0, '.')
 from web_gui import app
 
 # Configure for external access
-app.run_server(
+app.run(
     host='0.0.0.0',  # Allow external connections
     port=${PORT:-8050},
     debug=False,
-    dev_tools_hot_reload=False
+    dev_tools_ui=False,
+    dev_tools_props_check=False,
+    use_reloader=False
 )
 "

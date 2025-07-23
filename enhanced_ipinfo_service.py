@@ -255,10 +255,42 @@ class EnhancedIPinfoService:
             self.stats['errors'] += 1
             return None
     
-    def _get_online_info(self, ip: str) -> Optional[Dict]:
-        """Get IP information from IPinfo API."""
-        if not self.token:
+    def _get_ipinfo_lite_api(self, ip: str) -> Optional[Dict]:
+        """Get IP information from free IPinfo Lite API (no token required)."""
+        try:
+            # Use the free IPinfo Lite API - no token required
+            response = requests.get(f'https://api.ipinfo.io/lite/{ip}', timeout=5)
+            
+            if response.status_code == 200:
+                data = response.json()
+                # Standardize the response format
+                standardized = {
+                    'ip': data.get('ip', ip),
+                    'country': data.get('country', 'Unknown'),
+                    'country_name': data.get('country', 'Unknown'),
+                    'country_code': data.get('country_code', 'XX'),
+                    'continent': data.get('continent', 'Unknown'),
+                    'continent_code': data.get('continent_code', 'XX'),
+                    'asn': data.get('asn', 'Unknown'),
+                    'as_name': data.get('as_name', 'Unknown'),
+                    'as_domain': data.get('as_domain', 'unknown'),
+                    'source': 'ipinfo_lite_api',
+                    'timestamp': datetime.now()
+                }
+                return standardized
+            else:
+                print(f"⚠️ IPinfo Lite API request failed for {ip}: {response.status_code}")
+                return None
+                
+        except Exception as e:
+            print(f"⚠️ Error fetching IPinfo Lite API info for {ip}: {e}")
             return None
+
+    def _get_online_info(self, ip: str) -> Optional[Dict]:
+        """Get IP information from IPinfo API with token (enhanced data)."""
+        if not self.token:
+            # Try IPinfo Lite API first (free, no token required)
+            return self._get_ipinfo_lite_api(ip)
             
         try:
             headers = {'Authorization': f'Bearer {self.token}'}
@@ -266,15 +298,18 @@ class EnhancedIPinfoService:
             
             if response.status_code == 200:
                 data = response.json()
-                data['source'] = 'online'
+                data['source'] = 'ipinfo_paid_api'
+                data['timestamp'] = datetime.now()
                 return data
             else:
-                print(f"⚠️ API request failed for {ip}: {response.status_code}")
-                return None
+                print(f"⚠️ Enhanced API request failed for {ip}: {response.status_code}")
+                # Fallback to free Lite API
+                return self._get_ipinfo_lite_api(ip)
                 
         except Exception as e:
-            print(f"⚠️ Error fetching online info for {ip}: {e}")
-            return None
+            print(f"⚠️ Error fetching enhanced online info for {ip}: {e}")
+            # Fallback to free Lite API
+            return self._get_ipinfo_lite_api(ip)
     
     def get_ip_info(self, ip: str) -> Dict:
         """
