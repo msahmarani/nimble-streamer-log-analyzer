@@ -3,6 +3,10 @@ Nimble Streamer Log Analyzer
 A Python application for analyzing large log files and generating comprehensive reports.
 """
 
+# Fix matplotlib backend issues on Windows
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt

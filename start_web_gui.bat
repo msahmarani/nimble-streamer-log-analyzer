@@ -5,7 +5,7 @@ echo ====================================================
 echo.
 
 echo 🔍 Checking system...
-cd /d "C:\Users\mds\ns_log_analayzer"
+cd /d "C:\dev\ns_log_analayzer"
 
 echo ✅ Changed to project directory: %CD%
 echo.
@@ -34,7 +34,7 @@ echo ====================================================
 :: Set environment variable to avoid GUI issues
 set MPLBACKEND=Agg
 
-".venv\Scripts\python.exe" simple_launcher.py
+".venv\Scripts\python.exe" web_gui.py
 
 echo.
 echo 👋 Web GUI has stopped

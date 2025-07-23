@@ -3,6 +3,10 @@ Web GUI for Nimble Streamer Log Analyzer
 A Dash-based web interface for analyzing log files and viewing reports.
 """
 
+# Fix matplotlib backend issues on Windows
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
+
 import dash
 from dash import dcc, html, Input, Output, State, dash_table, callback
 import plotly.express as px
@@ -13,12 +17,10 @@ import base64
 import io
 from datetime import datetime
 import json
+from typing import Any, Dict, List, Optional, Union
 from log_analyzer import NimbleLogAnalyzer
 from json_log_analyzer import JSONNimbleLogAnalyzer
-import socket
-from log_analyzer import NimbleLogAnalyzer
-from json_log_analyzer import JSONNimbleLogAnalyzer
-from ipinfo_service import get_ipinfo_service, set_ipinfo_token
+from enhanced_ipinfo_service import enhanced_ipinfo_service, set_enhanced_ipinfo_token
 
 # Initialize Dash app
 app = dash.Dash(__name__, title="Nimble Streamer Log Analyzer")
@@ -307,7 +309,7 @@ def analyze_log_file(n_clicks, filename):
         
         # Determine format info
         format_info = ""
-        if hasattr(current_analyzer, 'format_detected'):
+        if hasattr(current_analyzer, 'format_detected') and current_analyzer.format_detected:
             format_info = f" (Format: {current_analyzer.format_detected.upper()})"
         
         # Prepare data for storage (convert to dict for JSON serialization)
@@ -397,7 +399,11 @@ def update_filter_options(analysis_data):
         end_date = None
         if 'timestamp' in current_data.columns:
             try:
-                timestamps = pd.to_datetime(current_data['timestamp'], errors='coerce')
+                # Try to use datetime column first if available, otherwise parse timestamp
+                if 'datetime' in current_data.columns and not current_data['datetime'].isna().all():
+                    timestamps = pd.to_datetime(current_data['datetime'], errors='coerce')
+                else:
+                    timestamps = pd.to_datetime(current_data['timestamp'], errors='coerce')
                 start_date = timestamps.min().date()
                 end_date = timestamps.max().date()
                 filter_options['date_range'] = [start_date.isoformat(), end_date.isoformat()]
@@ -588,7 +594,10 @@ def render_time_tab():
         try:
             # Create date column if it doesn't exist
             if 'date' not in current_data.columns:
-                current_data['date'] = pd.to_datetime(current_data['timestamp'], errors='coerce').dt.date
+                if 'datetime' in current_data.columns and not current_data['datetime'].isna().all():
+                    current_data['date'] = pd.to_datetime(current_data['datetime'], errors='coerce').dt.date
+                else:
+                    current_data['date'] = pd.to_datetime(current_data['timestamp'], errors='coerce').dt.date
             
             # Filter out null dates
             valid_dates = current_data.dropna(subset=['date'])
@@ -689,7 +698,7 @@ def render_error_tab():
                             charts.append(dash_table.DataTable(
                                 data=[{'IP Address': ip, 'Error Count': count, 
                                       'Percentage': f"{(count/len(errors))*100:.2f}%"} 
-                                      for ip, count in error_ips.items()],
+                                      for ip, count in error_ips.items()],  # type: ignore
                                 columns=[
                                     {'name': 'IP Address', 'id': 'IP Address'},
                                     {'name': 'Error Count', 'id': 'Error Count'},
@@ -942,21 +951,42 @@ def render_ip_tab():
         enriched_data = None
         
         try:
-            ipinfo_service = get_ipinfo_service()
-            # Take a sample of unique IPs for enrichment (limit to avoid too many API calls)
-            sample_ips = valid_ips['ip_address'].unique()[:50]  # Limit to 50 unique IPs
-            enriched_sample = ipinfo_service.batch_lookup(sample_ips.tolist())
+            # Use the enhanced IPinfo service for faster offline lookups
+            sample_ips = valid_ips['ip_address'].unique()[:100]  # Increased limit since offline is faster
+            enriched_sample_dict = enhanced_ipinfo_service.bulk_lookup(sample_ips.tolist())
+            
+            # Convert to DataFrame format
+            enriched_list = []
+            for ip, info in enriched_sample_dict.items():
+                enriched_list.append({
+                    'ip': ip,
+                    'country': info.get('country', 'Unknown'),
+                    'country_name': info.get('country_name', 'Unknown'),
+                    'country_code': info.get('country_code', 'XX'),
+                    'region': info.get('region', 'Unknown'),
+                    'city': info.get('city', 'Unknown'),
+                    'org': info.get('org', 'Unknown'),
+                    'asn': info.get('asn', 'Unknown'),
+                    'as_name': info.get('as_name', 'Unknown'),
+                    'as_domain': info.get('as_domain', 'unknown'),
+                    'continent': info.get('continent', 'Unknown'),
+                    'continent_code': info.get('continent_code', 'XX'),
+                    'is_private': info.get('country') == 'Private',
+                    'source': info.get('source', 'unknown')
+                })
+            
+            enriched_sample = pd.DataFrame(enriched_list)
             
             # Merge back with original data
             enriched_data = valid_ips.merge(
-                enriched_sample[['ip', 'country', 'region', 'city', 'org', 'is_private']], 
+                enriched_sample[['ip', 'country', 'country_name', 'country_code', 'region', 'city', 'org', 'asn', 'as_name', 'as_domain', 'continent', 'continent_code', 'is_private', 'source']], 
                 left_on='ip_address', 
                 right_on='ip', 
                 how='left'
             )
             
         except Exception as e:
-            print(f"IPinfo enrichment failed: {e}")
+            print(f"Enhanced IPinfo enrichment failed: {e}")
             ipinfo_enabled = False
         
         # Create components list
@@ -1058,7 +1088,7 @@ def render_ip_tab():
             html.H4("📋 Top IP Addresses Table"),
             dash_table.DataTable(
                 data=table_data,
-                columns=table_columns,
+                columns=table_columns,  # type: ignore
                 style_cell={'textAlign': 'left', 'padding': '10px'},
                 style_header={'backgroundColor': '#3498db', 'color': 'white', 'fontWeight': 'bold'},
                 style_data={'backgroundColor': '#f8f9fa'}
@@ -1212,7 +1242,10 @@ def render_http_errors_tab():
             ])
             
             for combo, count in top_combinations.head(15).items():
-                server_ip, stream_name = combo.split(':', 1)
+                if isinstance(combo, str) and ':' in combo:
+                    server_ip, stream_name = combo.split(':', 1)
+                else:
+                    server_ip, stream_name = str(combo), "unknown"
                 percentage = (count / len(server_stream_df)) * 100
                 server_stream_stats.append(
                     html.P([
@@ -1478,7 +1511,7 @@ def render_data_tab():
             html.H4(f"📋 Data Table (showing first 1,000 of {len(current_data):,} rows)"),
             html.Div([
                 dash_table.DataTable(
-                    data=table_data,
+                    data=table_data,  # type: ignore
                     columns=columns,
                     page_size=25,
                     style_cell={
@@ -1580,6 +1613,104 @@ def find_available_port(start_port=8050, max_attempts=10):
             continue
     return None
 
+# Apply Filters Callback
+@app.callback(
+    Output('analysis-data', 'data', allow_duplicate=True),
+    Input('apply-filters-btn', 'n_clicks'),
+    [State('date-range-picker', 'start_date'),
+     State('date-range-picker', 'end_date'),
+     State('status-filter', 'value'),
+     State('protocol-filter', 'value'),
+     State('stream-filter', 'value'),
+     State('analysis-data', 'data')],
+    prevent_initial_call=True
+)
+def apply_filters(n_clicks, start_date, end_date, status_filter, protocol_filter, stream_filter, analysis_data):
+    """Apply filters to the current data and update the analysis results."""
+    global current_data
+    
+    if n_clicks == 0 or current_data is None:
+        return analysis_data
+    
+    try:
+        print(f"Applying filters: start_date={start_date}, end_date={end_date}, status={status_filter}, protocol={protocol_filter}, stream={stream_filter}")
+        
+        # Start with original data
+        filtered_data = current_data.copy()
+        
+        # Apply date range filter
+        if start_date and end_date and 'timestamp' in filtered_data.columns:
+            try:
+                # Convert timestamp to datetime - use datetime column if available
+                if 'datetime' in filtered_data.columns and not filtered_data['datetime'].isna().all():
+                    filtered_data['timestamp_dt'] = pd.to_datetime(filtered_data['datetime'], errors='coerce')
+                else:
+                    filtered_data['timestamp_dt'] = pd.to_datetime(filtered_data['timestamp'], errors='coerce')
+                
+                # Convert filter dates to datetime
+                start_dt = pd.to_datetime(start_date)
+                end_dt = pd.to_datetime(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)  # Include full end date
+                
+                # Apply date filter
+                date_mask = (filtered_data['timestamp_dt'] >= start_dt) & (filtered_data['timestamp_dt'] <= end_dt)
+                filtered_data = filtered_data[date_mask]
+                
+                print(f"Date filter applied: {len(filtered_data)} records remaining (from {start_date} to {end_date})")
+                
+            except Exception as e:
+                print(f"Date filter error: {str(e)}")
+        
+        # Apply status code filter
+        if status_filter and 'status_code' in filtered_data.columns:
+            try:
+                status_mask = filtered_data['status_code'].isin(status_filter)
+                filtered_data = filtered_data[status_mask]
+                print(f"Status filter applied: {len(filtered_data)} records remaining")
+            except Exception as e:
+                print(f"Status filter error: {str(e)}")
+        
+        # Apply protocol filter
+        if protocol_filter and 'protocol' in filtered_data.columns:
+            try:
+                protocol_mask = filtered_data['protocol'].isin(protocol_filter)
+                filtered_data = filtered_data[protocol_mask]
+                print(f"Protocol filter applied: {len(filtered_data)} records remaining")
+            except Exception as e:
+                print(f"Protocol filter error: {str(e)}")
+        
+        # Apply stream filter
+        if stream_filter and 'stream_name' in filtered_data.columns:
+            try:
+                stream_mask = filtered_data['stream_name'].isin(stream_filter)
+                filtered_data = filtered_data[stream_mask]
+                print(f"Stream filter applied: {len(filtered_data)} records remaining")
+            except Exception as e:
+                print(f"Stream filter error: {str(e)}")
+        
+        # Update global data with filtered results
+        current_data = filtered_data
+        
+        # Prepare new analysis result
+        total_entries = len(filtered_data)
+        parsed_entries = len(filtered_data[filtered_data['parsed'] == True]) if 'parsed' in filtered_data.columns else total_entries
+        
+        # Create filtered analysis result
+        filtered_analysis_result = {
+            'total_entries': total_entries,
+            'parsed_entries': parsed_entries,
+            'analysis_timestamp': datetime.now().isoformat(),
+            'format_detected': analysis_data.get('format_detected', 'Unknown') if analysis_data else 'Unknown',
+            'filtered': True,
+            'filter_info': f"Filtered data: {total_entries} records"
+        }
+        
+        print(f"✅ Filters applied successfully: {total_entries} records remaining")
+        return filtered_analysis_result
+        
+    except Exception as e:
+        print(f"❌ Filter application error: {str(e)}")
+        return analysis_data
+
 # IPinfo Token Configuration Callback
 @app.callback(
     Output('ipinfo-status', 'children'),
@@ -1591,15 +1722,23 @@ def set_ipinfo_token_callback(n_clicks, token):
     if n_clicks > 0:
         if token and token.strip():
             try:
-                set_ipinfo_token(token.strip())
+                set_enhanced_ipinfo_token(token.strip())
+                stats = enhanced_ipinfo_service.get_statistics()
+                databases_status = "🗄️ Offline databases: " + (
+                    "Country ✅" if stats['databases_loaded']['country'] else "Country ❌"
+                ) + ", " + (
+                    "City ✅" if stats['databases_loaded']['city'] else "City ❌"
+                )
                 return html.Div([
                     html.P("✅ IPinfo API token configured successfully!", 
-                           style={'color': '#27ae60', 'fontWeight': 'bold'})
+                           style={'color': '#27ae60', 'fontWeight': 'bold'}),
+                    html.P(databases_status, 
+                           style={'color': '#2980b9', 'fontSize': '12px'})
                 ])
             except Exception as e:
                 return html.Div([
                     html.P(f"❌ Error setting token: {str(e)}", 
-                           style={'color': '#e74c3c', 'fontWeight': 'bold'})
+                           style={'color': '#e74c3c'})
                 ])
         else:
             return html.Div([

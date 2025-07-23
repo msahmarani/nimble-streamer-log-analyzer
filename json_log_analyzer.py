@@ -11,6 +11,7 @@ from datetime import datetime
 import os
 from log_analyzer import NimbleLogAnalyzer
 from nimble_app_log_parser import NimbleApplicationLogParser
+from syslog_parser import SyslogParser
 
 # Try to import tqdm, fall back to a dummy version if not available
 try:
@@ -46,19 +47,21 @@ class JSONNimbleLogAnalyzer(NimbleLogAnalyzer):
         self.json_logs = []
         self.format_detected = None
         self.nimble_app_parser = NimbleApplicationLogParser()
+        self.syslog_parser = SyslogParser()
     
     def detect_log_format(self, sample_lines=50):
         """
-        Detect if the log file is JSON format or traditional format.
+        Detect if the log file is JSON, traditional, syslog, or other format.
         
         Args:
             sample_lines (int): Number of lines to sample for detection
             
         Returns:
-            str: 'json', 'traditional', or 'unknown'
+            str: 'json', 'traditional', 'syslog', 'nimble_app', or 'unknown'
         """
         json_count = 0
         traditional_count = 0
+        syslog_count = 0
         sample_lines_analyzed = 0
         sample_content = []
         
@@ -79,24 +82,60 @@ class JSONNimbleLogAnalyzer(NimbleLogAnalyzer):
                     json.loads(line)
                     json_count += 1
                 except json.JSONDecodeError:
+                    # Check if it matches syslog pattern
+                    if self.is_syslog_line(line):
+                        syslog_count += 1
                     # Check if it matches traditional log patterns
-                    if self.is_traditional_log_line(line):
+                    elif self.is_traditional_log_line(line):
                         traditional_count += 1
         
-        # Determine format based on results
+        # Check for Nimble App logs
         nimble_app_lines = 0
         for line in sample_content:
             if re.search(r'^\[\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}.*?\].*?\[.*?\].*?[A-Z]:', line):
                 nimble_app_lines += 1
         
-        if json_count > 0 and json_count >= max(traditional_count, nimble_app_lines):
+        # Determine format based on results (priority order)
+        if json_count > 0 and json_count >= max(traditional_count, syslog_count, nimble_app_lines):
             self.format_detected = 'json'
+        elif syslog_count > 0 and syslog_count >= max(traditional_count, nimble_app_lines):
+            self.format_detected = 'syslog'
         elif nimble_app_lines > 0 and nimble_app_lines >= traditional_count:
             self.format_detected = 'nimble_app'
         elif traditional_count > 0:
             self.format_detected = 'traditional'
         else:
             self.format_detected = 'unknown'
+        
+        print(f"🔍 Log format detection results:")
+        print(f"   Sample lines analyzed: {sample_lines_analyzed}")
+        print(f"   JSON lines found: {json_count}")
+        print(f"   Syslog lines found: {syslog_count}")
+        print(f"   Nimble App log lines: {nimble_app_lines}")
+        print(f"   Traditional pattern matches: {traditional_count}")
+        print(f"   Format detected: {self.format_detected.upper()}")
+        
+        # If format is unknown, show sample lines for debugging
+        if self.format_detected == 'unknown' and sample_content:
+            print(f"📝 Sample log lines (first 3):")
+            for i, sample in enumerate(sample_content[:3]):
+                print(f"   Line {i+1}: {sample}")
+        
+        return self.format_detected
+    
+    def is_syslog_line(self, line):
+        """Check if a line matches syslog format patterns."""
+        syslog_patterns = [
+            # Standard syslog format: Jul 22 03:46:42 hostname service[pid]: message
+            r'^\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\S+\s+\w+(?:\[\d+\])?\s*:\s*.*',
+            # Alternative syslog format
+            r'^\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\S+\s+.*',
+        ]
+        
+        for pattern in syslog_patterns:
+            if re.match(pattern, line):
+                return True
+        return False
         
         print(f"🔍 Log format detection results:")
         print(f"   Sample lines analyzed: {sample_lines_analyzed}")
@@ -228,6 +267,8 @@ class JSONNimbleLogAnalyzer(NimbleLogAnalyzer):
             
             if log_format == 'json':
                 log_entry = self.parse_json_log_line(line)
+            elif log_format == 'syslog':
+                log_entry = self.parse_syslog_line(line)
             elif log_format == 'nimble_app':
                 log_entry = self.parse_nimble_app_line(line)
             elif log_format == 'traditional':
@@ -236,7 +277,11 @@ class JSONNimbleLogAnalyzer(NimbleLogAnalyzer):
                 # Try JSON first
                 log_entry = self.parse_json_log_line(line)
                 
-                # If JSON parsing failed, try Nimble app format
+                # If JSON parsing failed, try syslog
+                if not log_entry or not log_entry.get('parsed', False):
+                    log_entry = self.parse_syslog_line(line)
+                
+                # If syslog parsing failed, try Nimble app format
                 if not log_entry or not log_entry.get('parsed', False):
                     log_entry = self.parse_nimble_app_line(line)
                 
@@ -289,6 +334,85 @@ class JSONNimbleLogAnalyzer(NimbleLogAnalyzer):
                 'error': str(e),
                 'parsed': False,
                 'format': 'nimble_app_error'
+            }
+    
+    def parse_syslog_line(self, line):
+        """
+        Parse a syslog format line using the SyslogParser.
+        
+        Args:
+            line (str): Syslog line to parse
+            
+        Returns:
+            dict: Parsed syslog entry
+        """
+        try:
+            result = self.syslog_parser._parse_syslog_line(line, 0)
+            if result:
+                # Add compatibility fields for web interface
+                result['status_code'] = None  # Syslog doesn't have HTTP status codes
+                result['url'] = None  # Syslog doesn't have URLs
+                result['protocol'] = None  # Syslog doesn't have HTTP protocols
+                result['stream_name'] = result.get('service', 'unknown')  # Map service to stream
+                
+                # Map event types to status codes for visualization compatibility
+                event_mapping = {
+                    'auth_failure': 401,
+                    'security_block': 403,
+                    'error': 500,
+                    'connection_end': 200,
+                    'session_start': 200,
+                    'session_end': 200,
+                    'auth_attempt': 401,
+                    'scheduled_task': 200,
+                    'general': 200
+                }
+                result['status_code'] = event_mapping.get(result.get('event_type', 'general'), 200)
+                
+                # Add hour and date for time analysis
+                if result.get('datetime'):
+                    result['hour'] = result['datetime'].hour
+                    result['date'] = result['datetime'].date()
+                elif result.get('timestamp'):
+                    # Try to parse timestamp string for syslog format
+                    try:
+                        timestamp_str = result['timestamp']
+                        # Handle different timestamp formats
+                        parts = timestamp_str.split()
+                        if len(parts) == 3:  # Format: "Jul 22 02:34:02"
+                            current_year = datetime.now().year
+                            dt = datetime.strptime(f"{current_year} {timestamp_str}", "%Y %b %d %H:%M:%S")
+                        elif len(parts) == 4:  # Format: "2024 Jul 22 02:34:02" 
+                            dt = datetime.strptime(timestamp_str, "%Y %b %d %H:%M:%S")
+                        else:  # Other formats - try common patterns
+                            # Try ISO format first
+                            try:
+                                dt = datetime.fromisoformat(timestamp_str.replace('T', ' ').replace('Z', ''))
+                            except:
+                                # Fallback to current time
+                                dt = datetime.now()
+                        
+                        result['datetime'] = dt
+                        result['hour'] = dt.hour
+                        result['date'] = dt.date()
+                    except Exception as e:
+                        print(f"Timestamp parsing error for '{result.get('timestamp', '')}': {e}")
+                        # Fallback: use current time
+                        current_time = datetime.now()
+                        result['datetime'] = current_time
+                        result['hour'] = current_time.hour
+                        result['date'] = current_time.date()
+                
+                result['format'] = 'syslog'
+                
+            return result
+        except Exception as e:
+            return {
+                'timestamp': datetime.now(),
+                'raw_line': line,
+                'error': str(e),
+                'parsed': False,
+                'format': 'syslog_error'
             }
     
     def parse_unknown_format_line(self, line):
@@ -504,9 +628,17 @@ class JSONNimbleLogAnalyzer(NimbleLogAnalyzer):
         
         # Add derived fields for streaming analysis
         if 'timestamp' in self.data.columns:
-            self.data['hour'] = pd.to_datetime(self.data['timestamp']).dt.hour
-            self.data['date'] = pd.to_datetime(self.data['timestamp']).dt.date
-            self.data['day_of_week'] = pd.to_datetime(self.data['timestamp']).dt.day_name()
+            # Use the datetime column if available, otherwise try to parse timestamp
+            if 'datetime' in self.data.columns and not self.data['datetime'].isna().all():
+                # Use the already parsed datetime column
+                datetime_col = pd.to_datetime(self.data['datetime'], errors='coerce')
+            else:
+                # Try to parse timestamp with multiple formats
+                datetime_col = pd.to_datetime(self.data['timestamp'], errors='coerce', infer_datetime_format=True)
+            
+            self.data['hour'] = datetime_col.dt.hour
+            self.data['date'] = datetime_col.dt.date
+            self.data['day_of_week'] = datetime_col.dt.day_name()
         
         # Standardize status/event types
         if 'status' in self.data.columns:
